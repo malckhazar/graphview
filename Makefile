@@ -7,7 +7,7 @@ CFLAGS=-g `pkg-config --cflags $(DEPS)`
 LDFLAGS=`pkg-config --libs-only-L $(DEPS)`
 LIBS=`pkg-config --libs-only-l $(DEPS)`
 
-TARGET=graphtool
+TARGET=graphview
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $< -o $@
