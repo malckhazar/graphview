@@ -16,11 +16,6 @@ static void compile_dot_from_editor(GtkButton* button, gpointer user_data)
     //TODO: make compilation from dot to svg + render it in image
 }
 
-static void view_button_toggle(GtkCheckButton* button, gpointer user_data)
-{
-	gtk_widget_set_visible(GTK_WIDGET(user_data), gtk_check_button_get_active(button));
-}
-
 static void read_file(GFile* file, GtkTextView* text_view)
 {
     //TODO
@@ -87,12 +82,9 @@ static void file_action_button_clicked(GtkButton* button, gpointer user_data)
     start_action(file_dialog, window, NULL, perform_file_action, (gpointer)finish_action);
 }
 
-static GtkWidget* create_view_controls(GtkWidget* image_view, GtkWidget* text_view)
+static GtkWidget* create_view_controls(GtkWidget* text_view)
 {
-	GtkWidget* top = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-
-    GtkWidget* debug_label = gtk_label_new(NULL);
-    gtk_box_append(GTK_BOX(top), debug_label);
+	GtkWidget* top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
 
 	GtkWidget* button_new = gtk_button_new_with_label("New dot");
 	// TODO: add signal
@@ -105,46 +97,16 @@ static GtkWidget* create_view_controls(GtkWidget* image_view, GtkWidget* text_vi
     g_object_set_data(G_OBJECT(button_save), "action-type", (gpointer)file_action_save);
     g_signal_connect(button_save, "clicked", G_CALLBACK(file_action_button_clicked), text_view);
 
-	GtkWidget* frame = gtk_frame_new("View type");
-	GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
-	gtk_widget_set_hexpand(frame, FALSE);
-
-	// image button
-	GtkWidget* image_button = gtk_check_button_new_with_label("Image");
-	g_signal_connect(image_button, "toggled", G_CALLBACK(view_button_toggle), image_view);
-
-	// text button
-	GtkWidget* text_button = gtk_check_button_new_with_label("Editor");
-	gtk_check_button_set_group(GTK_CHECK_BUTTON(text_button), GTK_CHECK_BUTTON(image_button));
-	g_signal_connect(text_button, "toggled", G_CALLBACK(view_button_toggle), text_view);
-
-	gtk_box_append(GTK_BOX(box), image_button);
-	gtk_box_append(GTK_BOX(box), text_button);
-	gtk_frame_set_child(GTK_FRAME(frame), box);
+    GtkWidget* button_compile = gtk_button_new_with_label("Compile dot");
+    g_signal_connect(button_compile, "activate", G_CALLBACK(compile_dot_from_editor), text_view);
 
     gtk_box_append(GTK_BOX(top), button_new);
 	gtk_box_append(GTK_BOX(top), button_open);
 	gtk_box_append(GTK_BOX(top), button_save);
-	gtk_box_append(GTK_BOX(top), frame);
-
-	gtk_check_button_set_active(GTK_CHECK_BUTTON(text_button), TRUE);
+    gtk_box_append(GTK_BOX(top), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
+    gtk_box_append(GTK_BOX(top), button_compile);
 
 	return top;
-}
-
-static GtkWidget* create_editor(GtkWidget* text_view)
-{
-    GtkWidget* top = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
-    GtkWidget* toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
-
-    GtkWidget* compile_button = gtk_button_new_with_label("Compile");
-    g_signal_connect(compile_button, "activate", G_CALLBACK(compile_dot_from_editor), text_view);
-
-    gtk_box_append(GTK_BOX(toolbar), compile_button);
-    gtk_box_append(GTK_BOX(top), toolbar);
-    gtk_box_append(GTK_BOX(top), text_view);
-
-    return top;
 }
 
 static void app_activate(GtkApplication* app, gpointer user_data)
@@ -155,7 +117,7 @@ static void app_activate(GtkApplication* app, gpointer user_data)
 	gtk_window_set_title(GTK_WINDOW(window), "graphtool");
 	gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
 
-	cont = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+	cont = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
 	gtk_window_set_child(GTK_WINDOW(window), cont);
 
 	// view part
@@ -166,18 +128,31 @@ static void app_activate(GtkApplication* app, gpointer user_data)
     g_object_set_data(G_OBJECT(file_dialog), "text-view", text_view);
     gtk_file_dialog_set_modal(file_dialog, TRUE);
 
+    GtkWidget* paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+
 	// control part
-    GtkWidget* editor = create_editor(text_view);
-	gtk_box_append(GTK_BOX(cont), create_view_controls(image_view, editor));
-    gtk_box_append(GTK_BOX(cont), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
-	gtk_box_append(GTK_BOX(cont), image_view);
-    gtk_box_append(GTK_BOX(cont), editor);
+	gtk_box_append(GTK_BOX(cont), create_view_controls(text_view));
+    gtk_box_append(GTK_BOX(cont), paned);
+
+    GtkWidget *text_view_frame = gtk_frame_new(NULL);
+    gtk_frame_set_child(GTK_FRAME(text_view_frame), text_view);
+
+	gtk_paned_set_start_child(GTK_PANED(paned), text_view_frame);
+    gtk_paned_set_resize_start_child(GTK_PANED(paned), TRUE);
+    gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
+    gtk_widget_set_size_request(text_view, 100, -1);
+
+    GtkWidget *image_view_frame = gtk_frame_new(NULL);
+    gtk_frame_set_child(GTK_FRAME(image_view_frame), image_view);
+
+    gtk_paned_set_end_child(GTK_PANED(paned), image_view_frame);
+    gtk_paned_set_resize_end_child(GTK_PANED(paned), TRUE);
+    gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
+    gtk_widget_set_size_request(image_view, 100, -1);
 
     gtk_widget_set_hexpand(image_view, TRUE);
     gtk_widget_set_hexpand_set(image_view, TRUE);
-    gtk_widget_set_hexpand(text_view, TRUE);
     gtk_widget_set_vexpand(text_view, TRUE);
-    gtk_widget_set_hexpand_set(text_view, TRUE);
     gtk_widget_set_vexpand_set(text_view, TRUE);
 
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD);
