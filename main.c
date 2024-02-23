@@ -68,7 +68,7 @@ static void compile_dot(GtkTextBuffer* buffer, GtkWidget *image_view)
     if (!g_io_stream_close(G_IO_STREAM(dot_iostream), NULL, &error))
         goto compile_dot_error;
 
-    //TODO - system() call
+    // call dot 
     const char* dot_file_path = g_file_get_path(tmp_dot);
     const char* svg_file_path = g_file_get_path(tmp_svg);
 
@@ -128,13 +128,59 @@ static void new_dot(GtkButton* button, gpointer user_data)
 
 static void read_file(GFile* file, GtkTextBuffer* buffer)
 {
-    //TODO
+    GError* error = NULL;
+
+    char* content = NULL;
+    gsize size = 0;
+    g_file_load_contents(file, NULL, &content, &size, NULL, &error);
+    if (error) {
+        g_free(content);
+        return;
+    }
+
+    gtk_text_buffer_set_text(buffer, content, size);
+    g_free(content);
+
+    GtkWidget *image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
+    compile_dot(buffer, image_view);
 }
 
 static void write_file(GFile* file, GtkTextBuffer* buffer)
 {
-    //TODO
+    GError* error = NULL;
+    GFileIOStream* iostream = g_file_open_readwrite(file, NULL, &error);
+    if (error) {
+        if (error->code == G_IO_ERROR_IS_DIRECTORY)
+            return;
+        if (error->code == G_IO_ERROR_NOT_FOUND) {
+            error = NULL;
+            iostream = g_file_create_readwrite(file, G_FILE_CREATE_NONE, NULL, &error);
+        }
 
+        if (error) {
+            g_error("file operation failed: %s", error->message);
+            return;
+        }
+    }
+
+    GOutputStream *ostream = g_io_stream_get_output_stream(G_IO_STREAM(iostream));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_start_iter(buffer, &start);
+    gtk_text_buffer_get_end_iter(buffer, &end);
+
+    char *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    if (!text) {
+        g_error("Unable to get text from text buffer!");
+        g_object_unref(iostream);
+        return;
+    }
+    gtk_text_buffer_set_modified (buffer, FALSE);
+
+    gsize written = 0;
+    g_output_stream_write_all(ostream, text, strlen(text), &written, NULL, &error);
+    g_free(text);
+    g_io_stream_close(G_IO_STREAM(iostream), NULL, NULL);
+    g_object_unref(iostream);
 }
 
 static void compile_dot_from_editor(GtkButton* button, gpointer user_data)
