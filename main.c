@@ -20,10 +20,27 @@ static gchar new_dot_text[] = "digraph G {\n"
 static void read_file(GFile* file, GtkTextBuffer* buffer);
 static void write_file(GFile* file, GtkTextBuffer* buffer);
 
+#define ADD_TAG_KEYWORD(name) \
+    gtk_text_buffer_create_tag(buffer, name, \
+            "weight", PANGO_WEIGHT_BOLD, \
+            "foreground", "darkgreen", \
+            NULL);
+
 static void fill_dictionary(GtkTextBuffer *buffer)
 {
-    gtk_text_buffer_create_tag(buffer, "graph", "underline", PANGO_UNDERLINE_DOUBLE);
-    gtk_text_buffer_create_tag(buffer, "digraph", "underline", PANGO_UNDERLINE_DOUBLE);
+    const char* keywords[] = {
+        "graph",
+        "digraph",
+        "strict",
+        "node",
+        "edge",
+        "subgraph",
+        NULL
+    };
+
+    const char** keyword;
+    for (keyword = keywords; *keyword; keyword++)
+        ADD_TAG_KEYWORD(*keyword);
 }
 
 struct tag_search_range {
