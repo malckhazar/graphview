@@ -289,6 +289,7 @@ static void app_activate(GtkApplication* app, gpointer user_data)
 	// view part
 	GtkWidget* image_view = gtk_picture_new();
 	GtkWidget* text_view = gtk_text_view_new();
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(text_view), TRUE);
 	GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
     g_object_set_data (G_OBJECT(buffer), "image-view", image_view);
 
