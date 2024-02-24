@@ -26,6 +26,33 @@ static void fill_dictionary(GtkTextBuffer *buffer)
     gtk_text_buffer_create_tag(buffer, "digraph", "underline", PANGO_UNDERLINE_DOUBLE);
 }
 
+struct tag_search_range {
+    GtkTextBuffer *buffer;
+    GtkTextIter start;
+    GtkTextIter end;
+};
+
+static void check_apply_tag(GtkTextTag* tag, gpointer data)
+{
+    GtkTextIter iter;
+    struct tag_search_range* range = (struct tag_search_range*) data;
+    
+    char* token = NULL;
+    g_object_get(G_OBJECT(tag), "name", &token, NULL);
+
+    gtk_text_buffer_remove_tag(range->buffer, tag, &range->start, &range->end);
+    iter = range->start;
+    GtkTextIter match_start, match_end;
+    while (gtk_text_iter_forward_search(&iter, token, GTK_TEXT_SEARCH_TEXT_ONLY,
+                    &match_start, &match_end, &range->end))
+    {
+        if (gtk_text_iter_starts_word(&match_start) && gtk_text_iter_ends_word(&match_end))
+            gtk_text_buffer_apply_tag(range->buffer, tag, &match_start, &match_end);
+        iter = match_end;
+    }
+    g_free(token);
+}
+
 static void report_file_error(const char* func, const GError *error)
 {
     g_error ("%s: file IO error: %s (%d)", func, error->message, error->code);
@@ -128,6 +155,13 @@ static void new_dot(GtkButton* button, gpointer user_data)
     GtkTextBuffer *buffer = GTK_TEXT_BUFFER(user_data);
     gtk_text_buffer_set_text(buffer, new_dot_text, strlen(new_dot_text));
 
+    struct tag_search_range range;
+    range.buffer = buffer;
+    gtk_text_buffer_get_start_iter(buffer, &range.start);
+    gtk_text_buffer_get_end_iter(buffer, &range.end);
+    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
+    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+
     GtkWidget* image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
     compile_dot(buffer, image_view);
 }
@@ -146,6 +180,13 @@ static void read_file(GFile* file, GtkTextBuffer* buffer)
 
     gtk_text_buffer_set_text(buffer, content, size);
     g_free(content);
+
+    struct tag_search_range range;
+    range.buffer = buffer;
+    gtk_text_buffer_get_start_iter(buffer, &range.start);
+    gtk_text_buffer_get_end_iter(buffer, &range.end);
+    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
+    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
 
     GtkWidget *image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
     compile_dot(buffer, image_view);
@@ -281,33 +322,6 @@ static GtkWidget* create_view_controls(GtkWidget* text_view)
 	return top;
 }
 
-struct tag_search_range {
-    GtkTextBuffer *buffer;
-    GtkTextIter start;
-    GtkTextIter end;
-};
-
-static void check_apply_tag(GtkTextTag* tag, gpointer data)
-{
-    GtkTextIter iter;
-    struct tag_search_range* range = (struct tag_search_range*) data;
-    
-    char* token = NULL;
-    g_object_get(G_OBJECT(tag), "name", &token, NULL);
-
-    gtk_text_buffer_remove_tag(range->buffer, tag, &range->start, &range->end);
-    iter = range->start;
-    GtkTextIter match_start, match_end;
-    while (gtk_text_iter_forward_search(&iter, token, GTK_TEXT_SEARCH_TEXT_ONLY,
-                    &match_start, &match_end, &range->end))
-    {
-        if (gtk_text_iter_starts_word(&match_start) && gtk_text_iter_ends_word(&match_end))
-            gtk_text_buffer_apply_tag(range->buffer, tag, &match_start, &match_end);
-        iter = match_end;
-    }
-    g_free(token);
-}
-
 static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
 {
     GtkTextMark* mark = gtk_text_buffer_get_insert(buffer);
@@ -316,24 +330,25 @@ static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
     gtk_text_buffer_get_iter_at_mark(buffer, &iter, mark);
 
     GtkTextIter start = iter;
-    if (gtk_text_iter_inside_word(&start) || gtk_text_iter_ends_word(&start))
-        if (!gtk_text_iter_starts_line(&start))
+    GtkTextIter end = iter;
+
+    if (!gtk_text_iter_starts_line(&iter)) {
+        if (gtk_text_iter_inside_word(&start) || gtk_text_iter_ends_word(&start))
             gtk_text_iter_backward_word_start(&start);
 
-    GtkTextIter end = iter;
-    if (gtk_text_iter_inside_word(&end) || gtk_text_iter_starts_word(&end))
-        if (!gtk_text_iter_ends_line(&end))
-            gtk_text_iter_forward_word_end(&end);
-
-    if (gtk_text_iter_get_line(&start) != gtk_text_iter_get_line(&end))
-        return;
-
-    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
+        if (gtk_text_iter_inside_word(&end) || gtk_text_iter_starts_word(&end))
+            if (!gtk_text_iter_ends_line(&end))
+                gtk_text_iter_forward_word_end(&end);
+    } else {
+        gtk_text_iter_backward_line(&start);
+        gtk_text_iter_forward_line(&end);
+    }
 
     struct tag_search_range range;
     range.buffer = buffer;
     range.start = start;
     range.end = end;
+    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
     gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
 }
 
@@ -390,8 +405,9 @@ static void app_activate(GtkApplication* app, gpointer user_data)
 
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD);
 
-	gtk_text_buffer_set_text(buffer, new_dot_text, -1);
 	gtk_text_view_set_editable(GTK_TEXT_VIEW(text_view), TRUE);
+
+    new_dot(NULL, buffer);
 
 	gtk_window_maximize(GTK_WINDOW(window));
 	gtk_window_present(GTK_WINDOW(window));
