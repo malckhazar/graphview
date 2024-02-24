@@ -20,6 +20,12 @@ static gchar new_dot_text[] = "digraph G {\n"
 static void read_file(GFile* file, GtkTextBuffer* buffer);
 static void write_file(GFile* file, GtkTextBuffer* buffer);
 
+static void fill_dictionary(GtkTextBuffer *buffer)
+{
+    gtk_text_buffer_create_tag(buffer, "graph", "underline", PANGO_UNDERLINE_DOUBLE);
+    gtk_text_buffer_create_tag(buffer, "digraph", "underline", PANGO_UNDERLINE_DOUBLE);
+}
+
 static void report_file_error(const char* func, const GError *error)
 {
     g_error ("%s: file IO error: %s (%d)", func, error->message, error->code);
@@ -275,6 +281,62 @@ static GtkWidget* create_view_controls(GtkWidget* text_view)
 	return top;
 }
 
+struct tag_search_range {
+    GtkTextBuffer *buffer;
+    GtkTextIter start;
+    GtkTextIter end;
+};
+
+static void check_apply_tag(GtkTextTag* tag, gpointer data)
+{
+    GtkTextIter iter;
+    struct tag_search_range* range = (struct tag_search_range*) data;
+    
+    char* token = NULL;
+    g_object_get(G_OBJECT(tag), "name", &token, NULL);
+
+    gtk_text_buffer_remove_tag(range->buffer, tag, &range->start, &range->end);
+    iter = range->start;
+    GtkTextIter match_start, match_end;
+    while (gtk_text_iter_forward_search(&iter, token, GTK_TEXT_SEARCH_TEXT_ONLY,
+                    &match_start, &match_end, &range->end))
+    {
+        if (gtk_text_iter_starts_word(&match_start) && gtk_text_iter_ends_word(&match_end))
+            gtk_text_buffer_apply_tag(range->buffer, tag, &match_start, &match_end);
+        iter = match_end;
+    }
+    g_free(token);
+}
+
+static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
+{
+    GtkTextMark* mark = gtk_text_buffer_get_insert(buffer);
+
+    GtkTextIter iter;
+    gtk_text_buffer_get_iter_at_mark(buffer, &iter, mark);
+
+    GtkTextIter start = iter;
+    if (gtk_text_iter_inside_word(&start) || gtk_text_iter_ends_word(&start))
+        if (!gtk_text_iter_starts_line(&start))
+            gtk_text_iter_backward_word_start(&start);
+
+    GtkTextIter end = iter;
+    if (gtk_text_iter_inside_word(&end) || gtk_text_iter_starts_word(&end))
+        if (!gtk_text_iter_ends_line(&end))
+            gtk_text_iter_forward_word_end(&end);
+
+    if (gtk_text_iter_get_line(&start) != gtk_text_iter_get_line(&end))
+        return;
+
+    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
+
+    struct tag_search_range range;
+    range.buffer = buffer;
+    range.start = start;
+    range.end = end;
+    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+}
+
 static void app_activate(GtkApplication* app, gpointer user_data)
 {
 	GtkWidget *cont, *w;
@@ -291,7 +353,9 @@ static void app_activate(GtkApplication* app, gpointer user_data)
 	GtkWidget* text_view = gtk_text_view_new();
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(text_view), TRUE);
 	GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+    fill_dictionary(buffer);
     g_object_set_data (G_OBJECT(buffer), "image-view", image_view);
+    g_signal_connect(G_OBJECT(buffer), "changed", G_CALLBACK(text_buffer_changed), NULL);
 
     file_dialog = gtk_file_dialog_new();
     g_object_set_data(G_OBJECT(file_dialog), "text-buffer", buffer);
@@ -342,7 +406,8 @@ int main (int argc, char** argv)
 
 	g_signal_connect(app, "activate", G_CALLBACK(app_activate), NULL);
 	status = g_application_run(G_APPLICATION(app), argc, argv);
-	g_object_unref(app);
+
+    g_object_unref(app);
     g_object_unref(file_dialog);
 
 	return status;
