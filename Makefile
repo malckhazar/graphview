@@ -20,4 +20,4 @@ all: $(TARGET)
 clean:
 	rm -rf $(OBJECTS) $(TARGET)
 
-.PHONY: all
+.PHONY: all clean
