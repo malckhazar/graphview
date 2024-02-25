@@ -4,7 +4,7 @@ static gchar new_dot_text[] = "digraph G {\n"
                       "    a -> b;\n"
                       "}";
 
-GtkTextTagTable* create_dictionary()
+static GtkTextTagTable* create_dictionary()
 {
     const char* keywords[] = {
         "graph",
@@ -53,14 +53,9 @@ void check_apply_tag(GtkTextTag* tag, gpointer data)
     g_free(token);
 }
 
-#define report_file_error(func, error) \
-    g_error ("%s: file IO error: %s (%d)", func, error->message, error->code);
-
 void compile(GtkTextBuffer* buffer)
 {
     static gchar tmp_text_file_template[] = "graphview-XXXXXX.dot";
-    static gchar tmp_image_file_template[] = "graphview-XXXXXX.png";
-    GtkWidget* image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
 
     //write text to tmp
     GFileIOStream *iostream = NULL;
@@ -87,26 +82,29 @@ void compile(GtkTextBuffer* buffer)
     if (!g_output_stream_write_all(ostream, text, strlen(text), &written, NULL, &error))
         goto compile_dot_error;
 
+    if (written != strlen(text)) {
+        g_warning("Incomplete data was written to tmp!");
+        goto compile_dot_error;
+    }
+
     if (!g_io_stream_close(G_IO_STREAM(iostream), NULL, &error))
         goto compile_dot_error;
 
-    // call dot 
+    // call dot
     char* file_path = g_file_get_path(tmp_file);
 
     static const gchar call_template[] = "/usr/bin/dot -Tpng -O %s";
     size_t cmd_len = strlen(call_template) + strlen(file_path) - sizeof("%s")
-        + sizeof(".png") + 1;
+                     + sizeof(".png") + 1;
     gchar *call_dot_cmd = malloc(cmd_len);
     snprintf(call_dot_cmd, cmd_len, call_template, file_path);
     
     int res = system(call_dot_cmd);
+    free(call_dot_cmd);
     if (res < 0) {
         g_error("system(%s) call failed: %s", call_dot_cmd, strerror(errno));
-        free(call_dot_cmd);
-        return;
+        goto compile_dot_free;
     }
-    g_info("system(%s) call returned: %d", call_dot_cmd, res);
-    free(call_dot_cmd);
 
     g_file_delete(tmp_file, NULL, NULL);
     g_object_unref(tmp_file);
@@ -117,10 +115,12 @@ void compile(GtkTextBuffer* buffer)
     file_path = NULL;
 
     // show image to image_view
+    GtkWidget* image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
     gtk_picture_set_file(GTK_PICTURE(image_view), tmp_file);
 
 compile_dot_error:
-    if (error) report_file_error(__func__, error);
+    if (error) g_error ("%s: file IO error: %s (%d)", __func__,
+            error->message, error->code);
 
 compile_dot_free:
     if (text) g_free(text);
@@ -149,20 +149,27 @@ static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
     range.start = iter;
     range.end = iter;
 
+    // find processing range
     if (!gtk_text_iter_starts_line(&iter)) {
-        if (gtk_text_iter_inside_word(&range.start) || gtk_text_iter_ends_word(&range.start))
-            gtk_text_iter_backward_word_start(&range.start);
+        if (gtk_text_iter_inside_word(&range.start)
+                || gtk_text_iter_ends_word(&range.start)) {
 
-        if (gtk_text_iter_inside_word(&range.end) || gtk_text_iter_starts_word(&range.end))
+            gtk_text_iter_backward_word_start(&range.start);
+        }
+
+        if (gtk_text_iter_inside_word(&range.end)
+                || gtk_text_iter_starts_word(&range.end)) {
+
             if (!gtk_text_iter_ends_line(&range.end))
                 gtk_text_iter_forward_word_end(&range.end);
+        }
     } else {
         gtk_text_iter_backward_line(&range.start);
         gtk_text_iter_forward_line(&range.end);
     }
 
-    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
-    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+    gtk_text_tag_table_foreach(gtk_text_buffer_get_tag_table(range.buffer),
+            check_apply_tag, &range);
 }
 
 void set_default_text(GtkTextBuffer* model)
@@ -174,14 +181,13 @@ void set_default_text(GtkTextBuffer* model)
     gtk_text_buffer_get_start_iter(model, &range.start);
     gtk_text_buffer_get_end_iter(model, &range.end);
 
-    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(model);
-    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+    gtk_text_tag_table_foreach(gtk_text_buffer_get_tag_table(range.buffer),
+            check_apply_tag, &range);
 }
 
 GtkTextBuffer* create_text_model()
 {
     GtkTextBuffer* model = gtk_text_buffer_new(create_dictionary());
-
     g_signal_connect(G_OBJECT(model), "changed", G_CALLBACK(text_buffer_changed), NULL);
 
     return model;

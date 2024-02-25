@@ -27,8 +27,9 @@ static void read_file(GFile* file, GtkTextBuffer* buffer)
     range.buffer = buffer;
     gtk_text_buffer_get_start_iter(buffer, &range.start);
     gtk_text_buffer_get_end_iter(buffer, &range.end);
-    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
-    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+
+    gtk_text_tag_table_foreach(gtk_text_buffer_get_tag_table(range.buffer),
+            check_apply_tag, &range);
 
     GtkWidget *image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
     compile(buffer);
