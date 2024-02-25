@@ -15,25 +15,23 @@ static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
     GtkTextIter iter;
     gtk_text_buffer_get_iter_at_mark(buffer, &iter, mark);
 
-    GtkTextIter start = iter;
-    GtkTextIter end = iter;
-
-    if (!gtk_text_iter_starts_line(&iter)) {
-        if (gtk_text_iter_inside_word(&start) || gtk_text_iter_ends_word(&start))
-            gtk_text_iter_backward_word_start(&start);
-
-        if (gtk_text_iter_inside_word(&end) || gtk_text_iter_starts_word(&end))
-            if (!gtk_text_iter_ends_line(&end))
-                gtk_text_iter_forward_word_end(&end);
-    } else {
-        gtk_text_iter_backward_line(&start);
-        gtk_text_iter_forward_line(&end);
-    }
-
     struct tag_search_range range;
     range.buffer = buffer;
-    range.start = start;
-    range.end = end;
+    range.start = iter;
+    range.end = iter;
+
+    if (!gtk_text_iter_starts_line(&iter)) {
+        if (gtk_text_iter_inside_word(&range.start) || gtk_text_iter_ends_word(&range.start))
+            gtk_text_iter_backward_word_start(&range.start);
+
+        if (gtk_text_iter_inside_word(&range.end) || gtk_text_iter_starts_word(&range.end))
+            if (!gtk_text_iter_ends_line(&range.end))
+                gtk_text_iter_forward_word_end(&range.end);
+    } else {
+        gtk_text_iter_backward_line(&range.start);
+        gtk_text_iter_forward_line(&range.end);
+    }
+
     GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
     gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
 }
