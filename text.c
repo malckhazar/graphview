@@ -1,12 +1,10 @@
 #include "text.h"
 
-#define ADD_TAG_KEYWORD(name) \
-    gtk_text_buffer_create_tag(buffer, name, \
-            "weight", PANGO_WEIGHT_BOLD, \
-            "foreground", "darkgreen", \
-            NULL);
+static gchar new_dot_text[] = "digraph G {\n"
+                      "    a -> b;\n"
+                      "}";
 
-void fill_dictionary(GtkTextBuffer *buffer)
+GtkTextTagTable* create_dictionary()
 {
     const char* keywords[] = {
         "graph",
@@ -18,9 +16,20 @@ void fill_dictionary(GtkTextBuffer *buffer)
         NULL
     };
 
+    GtkTextTagTable* table = gtk_text_tag_table_new();
+
     const char** keyword;
-    for (keyword = keywords; *keyword; keyword++)
-        ADD_TAG_KEYWORD(*keyword);
+    GtkTextTag* tag;
+    for (keyword = keywords; *keyword; keyword++) {
+        tag = gtk_text_tag_new(*keyword);
+        g_object_set(G_OBJECT(tag),
+                "weight", PANGO_WEIGHT_BOLD,
+                "foreground", "darkgreen",
+                NULL);
+        gtk_text_tag_table_add(table, tag);
+    }
+
+    return table;
 }
 
 void check_apply_tag(GtkTextTag* tag, gpointer data)
@@ -47,7 +56,7 @@ void check_apply_tag(GtkTextTag* tag, gpointer data)
 #define report_file_error(func, error) \
     g_error ("%s: file IO error: %s (%d)", func, error->message, error->code);
 
-void compile_dot(GtkTextBuffer* buffer)
+void compile(GtkTextBuffer* buffer)
 {
     static gchar tmp_text_file_template[] = "graphview-XXXXXX.dot";
     static gchar tmp_image_file_template[] = "graphview-XXXXXX.png";
@@ -168,13 +177,23 @@ static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
     gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
 }
 
+void set_default_text(GtkTextBuffer* model)
+{
+    gtk_text_buffer_set_text(model, new_dot_text, strlen(new_dot_text));
+
+    struct tag_search_range range;
+    range.buffer = model;
+    gtk_text_buffer_get_start_iter(model, &range.start);
+    gtk_text_buffer_get_end_iter(model, &range.end);
+    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(model);
+    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+}
+
 GtkTextBuffer* create_text_model()
 {
-    GtkTextTagTable* table = gtk_text_tag_table_new();
-    GtkTextBuffer* model = gtk_text_buffer_new(table);
+    GtkTextBuffer* model = gtk_text_buffer_new(create_dictionary());
 
     g_signal_connect(G_OBJECT(model), "changed", G_CALLBACK(text_buffer_changed), NULL);
 
-    fill_dictionary(model);
     return model;
 }

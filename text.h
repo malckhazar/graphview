@@ -6,8 +6,9 @@ struct tag_search_range {
     GtkTextIter end;
 };
 
+void set_default_text(GtkTextBuffer* buffer);
 void check_apply_tag(GtkTextTag* tag, gpointer data);
-void compile_dot(GtkTextBuffer* buffer);
+void compile(GtkTextBuffer* buffer);
 void fill_dictionary(GtkTextBuffer* buffer);
 GtkTextBuffer* create_text_model();
 

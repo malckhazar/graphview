@@ -31,7 +31,7 @@ static void read_file(GFile* file, GtkTextBuffer* buffer)
     gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
 
     GtkWidget *image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
-    compile_dot(buffer);
+    compile(buffer);
 }
 
 static void write_file(GFile* file, GtkTextBuffer* buffer)
@@ -87,7 +87,7 @@ static void perform_file_action(GObject* object, GAsyncResult* res, gpointer dat
         {
             case file_action_open:
                 read_file(file, buffer);
-                compile_dot(buffer);
+                compile(buffer);
                 break;
 
             case file_action_save:

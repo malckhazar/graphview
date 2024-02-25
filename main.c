@@ -4,29 +4,17 @@
 #include "file_ops.h"
 #include "text.h"
 
-static gchar new_dot_text[] = "digraph G {\n"
-                      "    a -> b;\n"
-                      "}";
-
 static void new_dot(GtkButton* button, gpointer user_data)
 {
-    GtkTextBuffer *buffer = GTK_TEXT_BUFFER(user_data);
-    gtk_text_buffer_set_text(buffer, new_dot_text, strlen(new_dot_text));
-
-    struct tag_search_range range;
-    range.buffer = buffer;
-    gtk_text_buffer_get_start_iter(buffer, &range.start);
-    gtk_text_buffer_get_end_iter(buffer, &range.end);
-    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
-    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
-
-    compile_dot(buffer);
+    GtkTextBuffer *model = GTK_TEXT_BUFFER(user_data);
+    set_default_text(model);
+    compile(model);
 }
 
 static void compile_dot_from_editor(GtkButton* button, gpointer user_data)
 {
-    GtkTextBuffer* buffer = GTK_TEXT_BUFFER(user_data);
-    compile_dot(buffer);
+    GtkTextBuffer* model = GTK_TEXT_BUFFER(user_data);
+    compile(model);
 }
 
 static GtkWidget* create_view_controls(GtkTextBuffer* buffer)
@@ -53,12 +41,14 @@ static GtkWidget* create_view_controls(GtkTextBuffer* buffer)
 	return top;
 }
 
-static GtkWidget* create_text_area(GtkTextBuffer* buffer)
+static GtkWidget* create_text_area(GtkTextBuffer* model)
 {
-	GtkWidget* text_view = gtk_text_view_new_with_buffer(buffer);
+	GtkWidget* text_view = gtk_text_view_new_with_buffer(model);
+
     gtk_widget_set_size_request(text_view, 100, -1);
     gtk_widget_set_vexpand(text_view, TRUE);
     gtk_widget_set_vexpand_set(text_view, TRUE);
+
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(text_view), TRUE);
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD);
 	gtk_text_view_set_editable(GTK_TEXT_VIEW(text_view), TRUE);
@@ -69,13 +59,15 @@ static GtkWidget* create_text_area(GtkTextBuffer* buffer)
     return text_view_frame;
 }
 
-static GtkWidget* create_image_area(GtkTextBuffer* buffer)
+static GtkWidget* create_image_area(GtkTextBuffer* model)
 {
 	GtkWidget* image_view = gtk_picture_new();
+
     gtk_widget_set_size_request(image_view, 100, -1);
     gtk_widget_set_hexpand(image_view, TRUE);
     gtk_widget_set_hexpand_set(image_view, TRUE);
-    g_object_set_data (G_OBJECT(buffer), "image-view", image_view);
+
+    g_object_set_data (G_OBJECT(model), "image-view", image_view);
 
     GtkWidget *image_view_frame = gtk_frame_new(NULL);
     gtk_frame_set_child(GTK_FRAME(image_view_frame), image_view);
@@ -83,15 +75,15 @@ static GtkWidget* create_image_area(GtkTextBuffer* buffer)
     return image_view_frame;
 }
 
-static GtkWidget* create_edit_area(GtkTextBuffer* buffer)
+static GtkWidget* create_edit_area(GtkTextBuffer* model)
 {
     GtkPaned* paned = GTK_PANED(gtk_paned_new(GTK_ORIENTATION_HORIZONTAL));
 
-	gtk_paned_set_start_child(paned, create_text_area(buffer));
+	gtk_paned_set_start_child(paned, create_text_area(model));
     gtk_paned_set_resize_start_child(paned, TRUE);
     gtk_paned_set_shrink_start_child(paned, FALSE);
 
-    gtk_paned_set_end_child(GTK_PANED(paned), create_image_area(buffer));
+    gtk_paned_set_end_child(GTK_PANED(paned), create_image_area(model));
     gtk_paned_set_resize_end_child(GTK_PANED(paned), TRUE);
     gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
 
