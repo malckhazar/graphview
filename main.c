@@ -4,12 +4,39 @@
 #include "file_ops.h"
 #include "text.h"
 
-#define ASSERT(b) if (!(b)) g_error("%s: failed (%s)!\n", __func__, #b);
-
-
 static gchar new_dot_text[] = "digraph G {\n"
                       "    a -> b;\n"
                       "}";
+
+static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
+{
+    GtkTextMark* mark = gtk_text_buffer_get_insert(buffer);
+
+    GtkTextIter iter;
+    gtk_text_buffer_get_iter_at_mark(buffer, &iter, mark);
+
+    GtkTextIter start = iter;
+    GtkTextIter end = iter;
+
+    if (!gtk_text_iter_starts_line(&iter)) {
+        if (gtk_text_iter_inside_word(&start) || gtk_text_iter_ends_word(&start))
+            gtk_text_iter_backward_word_start(&start);
+
+        if (gtk_text_iter_inside_word(&end) || gtk_text_iter_starts_word(&end))
+            if (!gtk_text_iter_ends_line(&end))
+                gtk_text_iter_forward_word_end(&end);
+    } else {
+        gtk_text_iter_backward_line(&start);
+        gtk_text_iter_forward_line(&end);
+    }
+
+    struct tag_search_range range;
+    range.buffer = buffer;
+    range.start = start;
+    range.end = end;
+    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
+    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+}
 
 static void new_dot(GtkButton* button, gpointer user_data)
 {
@@ -55,36 +82,6 @@ static GtkWidget* create_view_controls(GtkWidget* text_view)
     gtk_box_append(GTK_BOX(top), button_compile);
 
 	return top;
-}
-
-static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
-{
-    GtkTextMark* mark = gtk_text_buffer_get_insert(buffer);
-
-    GtkTextIter iter;
-    gtk_text_buffer_get_iter_at_mark(buffer, &iter, mark);
-
-    GtkTextIter start = iter;
-    GtkTextIter end = iter;
-
-    if (!gtk_text_iter_starts_line(&iter)) {
-        if (gtk_text_iter_inside_word(&start) || gtk_text_iter_ends_word(&start))
-            gtk_text_iter_backward_word_start(&start);
-
-        if (gtk_text_iter_inside_word(&end) || gtk_text_iter_starts_word(&end))
-            if (!gtk_text_iter_ends_line(&end))
-                gtk_text_iter_forward_word_end(&end);
-    } else {
-        gtk_text_iter_backward_line(&start);
-        gtk_text_iter_forward_line(&end);
-    }
-
-    struct tag_search_range range;
-    range.buffer = buffer;
-    range.start = start;
-    range.end = end;
-    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
-    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
 }
 
 static void app_activate(GtkApplication* app, gpointer user_data)
