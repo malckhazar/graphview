@@ -1,4 +1,4 @@
-# GraphView -- simple tool to view dot graphs
+# GraphView &mdash; simple tool to view dot graphs
 
 GraphView is a tool simplifying writing graphs in dot-files, allowing to view the result
 offline without running dot compiler manually all the time.
@@ -11,5 +11,6 @@ with GTK 4 learning.
  * make
  * gcc
  * gtk4
+ * graphviz package
 
 Run `make` to build app
