@@ -1,5 +1,4 @@
 #include <gtk/gtk.h>
-#include <gdk/gdk.h>
 #include <stdio.h>
 #include <stdlib.h>
 
