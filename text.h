@@ -9,4 +9,5 @@ struct tag_search_range {
 void check_apply_tag(GtkTextTag* tag, gpointer data);
 void compile_dot(GtkTextBuffer* buffer);
 void fill_dictionary(GtkTextBuffer* buffer);
+GtkTextBuffer* create_text_model();
 

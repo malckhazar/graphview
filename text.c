@@ -44,12 +44,6 @@ void check_apply_tag(GtkTextTag* tag, gpointer data)
     g_free(token);
 }
 
-/*
-static void report_file_error(const char* func, const GError *error)
-{
-    g_error ("%s: file IO error: %s (%d)", func, error->message, error->code);
-}
-*/
 #define report_file_error(func, error) \
     g_error ("%s: file IO error: %s (%d)", func, error->message, error->code);
 
@@ -146,3 +140,41 @@ compile_dot_free:
     }
 }
 
+static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
+{
+    GtkTextMark* mark = gtk_text_buffer_get_insert(buffer);
+
+    GtkTextIter iter;
+    gtk_text_buffer_get_iter_at_mark(buffer, &iter, mark);
+
+    struct tag_search_range range;
+    range.buffer = buffer;
+    range.start = iter;
+    range.end = iter;
+
+    if (!gtk_text_iter_starts_line(&iter)) {
+        if (gtk_text_iter_inside_word(&range.start) || gtk_text_iter_ends_word(&range.start))
+            gtk_text_iter_backward_word_start(&range.start);
+
+        if (gtk_text_iter_inside_word(&range.end) || gtk_text_iter_starts_word(&range.end))
+            if (!gtk_text_iter_ends_line(&range.end))
+                gtk_text_iter_forward_word_end(&range.end);
+    } else {
+        gtk_text_iter_backward_line(&range.start);
+        gtk_text_iter_forward_line(&range.end);
+    }
+
+    GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(buffer);
+    gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
+}
+
+GtkTextBuffer* create_text_model()
+{
+    GtkTextTagTable* table = gtk_text_tag_table_new();
+    GtkTextBuffer* model = gtk_text_buffer_new(table);
+
+    g_signal_connect(G_OBJECT(model), "changed", G_CALLBACK(text_buffer_changed), NULL);
+
+    fill_dictionary(model);
+    return model;
+}
