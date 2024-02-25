@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include "text.h"
 
 static gchar new_dot_text[] = "digraph G {\n"
@@ -6,7 +7,7 @@ static gchar new_dot_text[] = "digraph G {\n"
 
 static GtkTextTagTable* create_dictionary()
 {
-    const char* keywords[] = {
+    static const char* keywords[] = {
         "graph",
         "digraph",
         "strict",
@@ -16,10 +17,17 @@ static GtkTextTagTable* create_dictionary()
         NULL
     };
 
+    static const char* symbols[] = {
+        "--",
+        "->",
+        NULL
+    };
+
     GtkTextTagTable* table = gtk_text_tag_table_new();
 
     const char** keyword;
     GtkTextTag* tag;
+
     for (keyword = keywords; *keyword; keyword++) {
         tag = gtk_text_tag_new(*keyword);
         g_object_set(G_OBJECT(tag),
@@ -27,6 +35,16 @@ static GtkTextTagTable* create_dictionary()
                 "foreground", "darkgreen",
                 NULL);
         gtk_text_tag_table_add(table, tag);
+        g_message("added tag '%s'", *keyword);
+    }
+
+    for (keyword = symbols; *keyword; keyword++) {
+        tag = gtk_text_tag_new(*keyword);
+        g_object_set(G_OBJECT(tag),
+                "weight", PANGO_WEIGHT_BOLD,
+                NULL);
+        gtk_text_tag_table_add(table, tag);
+        g_message("added tag '%s'", *keyword);
     }
 
     return table;
@@ -43,13 +61,26 @@ void check_apply_tag(GtkTextTag* tag, gpointer data)
     gtk_text_buffer_remove_tag(range->buffer, tag, &range->start, &range->end);
     iter = range->start;
     GtkTextIter match_start, match_end;
-    while (gtk_text_iter_forward_search(&iter, token, GTK_TEXT_SEARCH_TEXT_ONLY,
+
+    while (gtk_text_iter_forward_search(&iter, token, GTK_TEXT_SEARCH_VISIBLE_ONLY,
                     &match_start, &match_end, &range->end))
     {
-        if (gtk_text_iter_starts_word(&match_start) && gtk_text_iter_ends_word(&match_end))
+        GtkTextIter ms = match_start;
+        GtkTextIter me = match_end;
+        
+        gtk_text_iter_backward_char(&ms);
+        gboolean is_symbol = isspace(gtk_text_iter_get_char(&ms)) &&
+            (isspace(gtk_text_iter_get_char(&me)) || (gtk_text_iter_ends_line(&me)));
+
+        if (gtk_text_iter_starts_word(&match_start) && gtk_text_iter_ends_word(&match_end)) {
             gtk_text_buffer_apply_tag(range->buffer, tag, &match_start, &match_end);
+        } else if (is_symbol) {
+            gtk_text_buffer_apply_tag(range->buffer, tag, &match_start, &match_end);
+        }
+
         iter = match_end;
     }
+
     g_free(token);
 }
 
@@ -150,23 +181,8 @@ static void text_buffer_changed(GtkTextBuffer* buffer, gpointer user_data)
     range.end = iter;
 
     // find processing range
-    if (!gtk_text_iter_starts_line(&iter)) {
-        if (gtk_text_iter_inside_word(&range.start)
-                || gtk_text_iter_ends_word(&range.start)) {
-
-            gtk_text_iter_backward_word_start(&range.start);
-        }
-
-        if (gtk_text_iter_inside_word(&range.end)
-                || gtk_text_iter_starts_word(&range.end)) {
-
-            if (!gtk_text_iter_ends_line(&range.end))
-                gtk_text_iter_forward_word_end(&range.end);
-        }
-    } else {
-        gtk_text_iter_backward_line(&range.start);
-        gtk_text_iter_forward_line(&range.end);
-    }
+    gtk_text_iter_backward_line(&range.start);
+    gtk_text_iter_forward_line(&range.end);
 
     gtk_text_tag_table_foreach(gtk_text_buffer_get_tag_table(range.buffer),
             check_apply_tag, &range);
