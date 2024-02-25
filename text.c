@@ -63,25 +63,15 @@ void compile(GtkTextBuffer* buffer)
     GtkWidget* image_view = g_object_get_data(G_OBJECT(buffer), "image-view");
 
     //write text to tmp
-    GFileIOStream *dot_iostream = NULL;
-    GFileIOStream *svg_iostream = NULL;
+    GFileIOStream *iostream = NULL;
     GError *error = NULL;
-    GFile *tmp_dot = NULL;
-    GFile *tmp_svg = NULL;
+    GFile *tmp_file = NULL;
     char* text = NULL;
 
-    tmp_dot = g_file_new_tmp(tmp_text_file_template, &dot_iostream, &error);
+    tmp_file = g_file_new_tmp(tmp_text_file_template, &iostream, &error);
     if (error) goto compile_dot_error;
 
-    tmp_svg = g_file_new_tmp(tmp_image_file_template, &svg_iostream, &error);
-    if (error) goto compile_dot_error;
-
-    g_io_stream_close(G_IO_STREAM(svg_iostream), NULL, &error);
-    g_object_unref(svg_iostream);
-    svg_iostream = NULL;
-    if (error) goto compile_dot_error;
-
-    GOutputStream *ostream = g_io_stream_get_output_stream(G_IO_STREAM(dot_iostream));
+    GOutputStream *ostream = g_io_stream_get_output_stream(G_IO_STREAM(iostream));
     GtkTextIter start, end;
     gtk_text_buffer_get_start_iter(buffer, &start);
     gtk_text_buffer_get_end_iter(buffer, &end);
@@ -97,20 +87,17 @@ void compile(GtkTextBuffer* buffer)
     if (!g_output_stream_write_all(ostream, text, strlen(text), &written, NULL, &error))
         goto compile_dot_error;
 
-    if (!g_io_stream_close(G_IO_STREAM(dot_iostream), NULL, &error))
+    if (!g_io_stream_close(G_IO_STREAM(iostream), NULL, &error))
         goto compile_dot_error;
 
     // call dot 
-    const char* dot_file_path = g_file_get_path(tmp_dot);
-    const char* svg_file_path = g_file_get_path(tmp_svg);
+    char* file_path = g_file_get_path(tmp_file);
 
-    static const gchar call_template[] = "/usr/bin/dot -Tpng -o%s %s";
-    size_t cmd_len = strlen(call_template) + 
-        strlen(dot_file_path) - 2 +
-        strlen(svg_file_path) - 2 + 1;
+    static const gchar call_template[] = "/usr/bin/dot -Tpng -O %s";
+    size_t cmd_len = strlen(call_template) + strlen(file_path) - sizeof("%s")
+        + sizeof(".png") + 1;
     gchar *call_dot_cmd = malloc(cmd_len);
-    memset(call_dot_cmd, 0, cmd_len);
-    snprintf(call_dot_cmd, cmd_len, call_template, svg_file_path, dot_file_path);
+    snprintf(call_dot_cmd, cmd_len, call_template, file_path);
     
     int res = system(call_dot_cmd);
     if (res < 0) {
@@ -121,8 +108,16 @@ void compile(GtkTextBuffer* buffer)
     g_info("system(%s) call returned: %d", call_dot_cmd, res);
     free(call_dot_cmd);
 
+    g_file_delete(tmp_file, NULL, NULL);
+    g_object_unref(tmp_file);
+
+    file_path = strcat(file_path, ".png");
+    tmp_file = g_file_new_for_path(file_path);
+    g_free(file_path);
+    file_path = NULL;
+
     // show image to image_view
-    gtk_picture_set_file(GTK_PICTURE(image_view), tmp_svg);
+    gtk_picture_set_file(GTK_PICTURE(image_view), tmp_file);
 
 compile_dot_error:
     if (error) report_file_error(__func__, error);
@@ -130,22 +125,15 @@ compile_dot_error:
 compile_dot_free:
     if (text) g_free(text);
 
-    if (dot_iostream) {
-        g_io_stream_close(G_IO_STREAM(dot_iostream), NULL, NULL);
-        g_object_unref(dot_iostream);
+    if (file_path) g_free(file_path);
+
+    if (iostream) {
+        g_io_stream_close(G_IO_STREAM(iostream), NULL, NULL);
+        g_object_unref(iostream);
     }
-    if (tmp_dot) {
-        g_file_delete(tmp_dot, NULL, NULL);
-        g_object_unref(tmp_dot);
-    }
-    
-    if (svg_iostream) {
-        g_io_stream_close(G_IO_STREAM(svg_iostream), NULL, NULL);
-        g_object_unref(svg_iostream);
-    }
-    if (tmp_svg) {
-        g_file_delete(tmp_svg, NULL, NULL);
-        g_object_unref(tmp_svg);
+    if (tmp_file) {
+        g_file_delete(tmp_file, NULL, NULL);
+        g_object_unref(tmp_file);
     }
 }
 
@@ -185,6 +173,7 @@ void set_default_text(GtkTextBuffer* model)
     range.buffer = model;
     gtk_text_buffer_get_start_iter(model, &range.start);
     gtk_text_buffer_get_end_iter(model, &range.end);
+
     GtkTextTagTable* tag_table = gtk_text_buffer_get_tag_table(model);
     gtk_text_tag_table_foreach(tag_table, check_apply_tag, &range);
 }
